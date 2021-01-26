@@ -32,7 +32,7 @@ def getDataByLinks(links):
       matchCentreData = json[0]
       formationIdNameMappings = json[1]
       name = getFileName(link)
-      f = open(name+'.json', 'w')
+      f = open(name+'.json', 'w', encoding='utf-8')
       try:
         f.write("[")
         f.write(matchCentreData)
@@ -97,13 +97,33 @@ def getAllTeamsLaLiga():
   driver.close()
   return teams
 
+def saveDataSingleMatch(link):
+  driver = initDriver()
+  json = getJSON(driver, link)
+  if(len(json) > 0):
+    matchCentreData = json[0]
+    formationIdNameMappings = json[1]
+    name = getFileName(link)
+    f = open(name+'.json', 'w', encoding='utf-8')
+    try:
+      f.write("[")
+      f.write(matchCentreData)
+      f.write(",")
+      f.write(formationIdNameMappings)
+      f.write("]")
+    finally:
+      f.close()
+      os.chdir("..")
+  driver.close()
+
 def menu():
   toQuit = False
   option = 0
   while not toQuit:
-    print ("1. Get JSON data from team URL (e.g. https://www.whoscored.com/Teams/819/Show/Spain-Getafe)")
+    print ("1. Get JSON data entering team URL (e.g. https://www.whoscored.com/Teams/819/Show/Spain-Getafe)")
     print ("2. Select team from LaLiga")
-    print ("3. Exit")
+    print ("3. Get JSON data entering single match (e.g. https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe)")
+    print ("4. Exit")
     print ("Please, choose an option")
     option = askNumber()
 
@@ -119,9 +139,13 @@ def menu():
       getDataByLinks(links)
       print("Job finished")
     elif option == 3:
+      url = str(input("URL: "))
+      saveDataSingleMatch(url)
+      print("Job finished")
+    elif option == 4:
       toQuit = True
     else:
-      print ("Enter a number between 1 and 3")
+      print ("Enter a number between 1 and 4")
   print ("Bye")
   sys.exit()
 
