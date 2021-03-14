@@ -6,6 +6,14 @@ import sys
 from Team import Team
 from webdriver_manager.chrome import ChromeDriverManager
 
+LA_LIGA_ENDPOINT = "https://www.whoscored.com/Regions/206/Tournaments/4/Espa%C3%B1a-LaLiga"
+PREMIER_LEAGUE_ENDPOINT = "https://www.whoscored.com/Regions/252/Tournaments/2/England-Premier-League"
+SERIE_A_ENDPOINT = "https://www.whoscored.com/Regions/108/Tournaments/5/Italy-Serie-A"
+BUNDESLIGA_ENDPOINT = "https://www.whoscored.com/Regions/81/Tournaments/3/Germany-Bundesliga"
+LIGUE_1_ENDPOINT = "https://www.whoscored.com/Regions/74/Tournaments/22/France-Ligue-1"
+UCL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/12/Seasons/8177/Stages/19009/Show/Europe-Champions-League-2020-2021"
+UEL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/30/Seasons/8178/Stages/19010/Show/Europe-Europa-League-2020-2021"
+
 def initDriver():
   driver = webdriver.Chrome(ChromeDriverManager().install())
   return driver
@@ -24,14 +32,14 @@ def getAllLinksTeam(baseURL):
   driver.close()
   return links
 
-def getDataByLinks(links):
+def getDataByLinks(links, team=""):
   driver = initDriver()
   for link in links:
     json = getJSON(driver, link)
     if(len(json) > 0):
       matchCentreData = json[0]
       formationIdNameMappings = json[1]
-      name = getFileName(link)
+      name = getFileName(link, team)
       f = open(name+'.json', 'w', encoding='utf-8')
       try:
         f.write("[")
@@ -44,7 +52,7 @@ def getDataByLinks(links):
         os.chdir("..")
   driver.close()
 
-def getFileName(link):
+def getFileName(link, team=""):
   link = link[link.find("/Live/")+6:]
   indexLastNumber = findLastNumberPosition(link)
   folderName = link[:indexLastNumber+1]
@@ -52,6 +60,12 @@ def getFileName(link):
   if not os.path.exists(dir):
     os.mkdir(dir)
   os.chdir(dir)
+
+  if team != "":
+    dir = os.path.join(dir,team.getName())
+    if not os.path.exists(dir):
+      os.mkdir(dir)
+    os.chdir(dir)
   
   matchName = link[indexLastNumber+2:]
   return matchName
@@ -80,12 +94,12 @@ def getJSON(driver, link):
   data.append(formationIdNameMappings)
   return data
 
-def getAllTeamsLaLiga():
+def getAllTeamsByLeague(path):
   teams = []
   driver = initDriver()
-  driver.get("https://www.whoscored.com/Regions/206/Tournaments/4/Espa%C3%B1a-LaLiga")
-  time.sleep(2) 
-  teamsList = driver.find_elements_by_xpath("//*[@id='standings-18851-content']/tr[*]/td[*]/a[@class='team-link ']")
+  driver.get(path)
+  time.sleep(2)
+  teamsList = driver.find_elements_by_xpath("//*[starts-with(@id, 'standings-')]/tr[*]/td[*]/a[@class='team-link ']")
   i = 0
   while i < len(teamsList):
     anchor = teamsList[i]
@@ -123,7 +137,8 @@ def menu():
     print ("1. Get JSON data entering team URL (e.g. https://www.whoscored.com/Teams/819/Show/Spain-Getafe)")
     print ("2. Select team from LaLiga")
     print ("3. Get JSON data entering single match (e.g. https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe)")
-    print ("4. Exit")
+    print ("4. Get JSON data from La Liga (Spain), Premier League (England), Serie A (Italy), Bundesliga (Germany), Ligue 1 (France), UCL and UEL")
+    print ("5. Exit")
     print ("Please, choose an option")
     option = askNumber()
 
@@ -133,7 +148,7 @@ def menu():
       getDataByLinks(links)
       print("Job finished")
     elif option == 2:
-      teams = getAllTeamsLaLiga()
+      teams = getAllTeamsByLeague(LA_LIGA_ENDPOINT)
       team = subMenuTeams(teams)
       links = getAllLinksTeam(team.getWebURL())
       getDataByLinks(links)
@@ -143,11 +158,42 @@ def menu():
       saveDataSingleMatch(url)
       print("Job finished")
     elif option == 4:
+      getJsonFromAllTeams()
+      print("Job finished")
+    elif option == 5:
       toQuit = True
     else:
       print ("Enter a number between 1 and 4")
   print ("Bye")
   sys.exit()
+
+def getJsonFromAllTeams():
+  teams = getAllTeamsByLeague(LA_LIGA_ENDPOINT)
+  teams += getAllTeamsByLeague(PREMIER_LEAGUE_ENDPOINT)
+  teams += getAllTeamsByLeague(SERIE_A_ENDPOINT)
+  teams += getAllTeamsByLeague(BUNDESLIGA_ENDPOINT)
+  teams += getAllTeamsByLeague(LIGUE_1_ENDPOINT)
+  teams += getAllTeamsByLeague(UCL_ENDPOINT)
+  teams += getAllTeamsByLeague(UEL_ENDPOINT)
+  teams = getUniqueTeams(teams)
+  for team in teams:
+    links = getAllLinksTeam(team.getWebURL())
+    print("INI " + team.getName() + " - " + str(len(links)))
+    getDataByLinks(links, team)
+    print("FIN " + team.getName())
+
+def getUniqueTeams(teams):
+  unique_teams = []
+  addTeam = True
+  for team in teams:
+    for ut in unique_teams:
+      if team.getName() == ut.getName():
+        addTeam = False
+        break
+    if addTeam:
+      unique_teams.append(team)
+    addTeam = True
+  return unique_teams
 
 def subMenuTeams(teamsList):
   toQuit = False
