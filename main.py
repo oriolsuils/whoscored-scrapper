@@ -5,6 +5,7 @@ import os
 import sys
 from Team import Team
 from webdriver_manager.chrome import ChromeDriverManager
+import threading
 
 LA_LIGA_ENDPOINT = "https://www.whoscored.com/Regions/206/Tournaments/4/Espa%C3%B1a-LaLiga"
 PREMIER_LEAGUE_ENDPOINT = "https://www.whoscored.com/Regions/252/Tournaments/2/England-Premier-League"
@@ -49,13 +50,13 @@ def getDataByLinks(links, team=""):
         f.write("]")
       finally:
         f.close()
-        os.chdir("..")
+        os.chdir("../..")
   driver.close()
 
 def getFileName(link, team=""):
   link = link[link.find("/Live/")+6:]
   indexLastNumber = findLastNumberPosition(link)
-  folderName = link[:indexLastNumber+1]
+  folderName = link[:indexLastNumber]
   dir = os.path.join((os.path.dirname(os.path.realpath(__file__))),folderName)
   if not os.path.exists(dir):
     os.mkdir(dir)
@@ -67,17 +68,16 @@ def getFileName(link, team=""):
       os.mkdir(dir)
     os.chdir(dir)
   
-  matchName = link[indexLastNumber+2:]
+  matchName = link[indexLastNumber+1:]
   return matchName
 
 def findLastNumberPosition(text):
-  i=0
-  lastIndex = 0
-  while i < len(text):
-    if text[i].isnumeric():
-      lastIndex = i
-    i+=1
-  return lastIndex
+  idx = text.find("2021-2022")
+  if(idx < 0):
+    idx = text.find("2020-2021")
+  if(idx < 0):
+    idx = text.find("2019-2020")
+  return idx+9
 
 def getJSON(driver, link):
   data = []
@@ -87,10 +87,11 @@ def getJSON(driver, link):
   raw_result = raw_result.get_attribute("innerHTML")
   if "matchCentreData" not in raw_result:
     return data
-  matchCentreData = raw_result[raw_result.find("{"):raw_result.find(";")]
+  matchCentreData = raw_result[raw_result.find("matchCentreData"):raw_result.find("matchCentreEventTypeJson")]
+  matchCentreData = matchCentreData[matchCentreData.find("{"):matchCentreData.find(",\n")]
   data.append(matchCentreData)
   formationIdNameMappings = raw_result[raw_result.find("formationIdNameMappings"):]
-  formationIdNameMappings = formationIdNameMappings[formationIdNameMappings.find("{"):formationIdNameMappings.find(";")]
+  formationIdNameMappings = formationIdNameMappings[formationIdNameMappings.find("{"):formationIdNameMappings.find("\n        };")]
   data.append(formationIdNameMappings)
   return data
 
@@ -134,16 +135,17 @@ def menu():
   toQuit = False
   option = 0
   while not toQuit:
-    print ("1. Get JSON data entering team URL (e.g. https://www.whoscored.com/Teams/819/Show/Spain-Getafe)")
+    print ("1. Get JSON data entering team URL")
     print ("2. Select team from LaLiga")
-    print ("3. Get JSON data entering single match (e.g. https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe)")
+    print ("3. Get JSON data entering single match")
     print ("4. Get JSON data from La Liga (Spain), Premier League (England), Serie A (Italy), Bundesliga (Germany), Ligue 1 (France), UCL and UEL")
-    print ("5. Exit")
+    print ("5. Live match")
+    print ("6. Exit")
     print ("Please, choose an option")
     option = askNumber()
 
     if option == 1:
-      url = str(input("URL: "))
+      url = str(input("(e.g. https://www.whoscored.com/Teams/819/Show/Spain-Getafe)\nURL: "))
       links = getAllLinksTeam(url)
       getDataByLinks(links)
       print("Job finished")
@@ -154,18 +156,37 @@ def menu():
       getDataByLinks(links)
       print("Job finished")
     elif option == 3:
-      url = str(input("URL: "))
+      url = str(input("(e.g. https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe)\nURL:"))
       saveDataSingleMatch(url)
       print("Job finished")
     elif option == 4:
       getJsonFromAllTeams()
       print("Job finished")
     elif option == 5:
+      url = str(input("(e.g. https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe)\nURL: "))
+      ticker = threading.Event()
+      while not ticker.wait(60.0):
+        saveDataSingleMatch(url)
+        if checkIfMatchEnded(url):
+          break
+      print("Job finished")
+    elif option == 6:
       toQuit = True
     else:
       print ("Enter a number between 1 and 4")
   print ("Bye")
   sys.exit()
+
+def checkIfMatchEnded(url):
+  ended = False
+  driver = initDriver()
+  driver.get(url)
+  time.sleep(10)
+  raw_result = driver.find_elements_by_xpath(("//*[@id='match-header']/table/tbody/tr[2]/td[2]/div[1]/dl/dd/span"))[0]
+  raw_result = raw_result.get_attribute("innerHTML")
+  if raw_result == "FT":
+    ended = True
+  return ended
 
 def getJsonFromAllTeams():
   teams = getAllTeamsByLeague(LA_LIGA_ENDPOINT)
@@ -175,14 +196,14 @@ def getJsonFromAllTeams():
   teams += getAllTeamsByLeague(LIGUE_1_ENDPOINT)
   teams += getAllTeamsByLeague(UCL_ENDPOINT)
   teams += getAllTeamsByLeague(UEL_ENDPOINT)
-  teams = getUniqueTeams(teams)
+  teams = setUniqueTeams(teams)
   for team in teams:
     links = getAllLinksTeam(team.getWebURL())
     print("INI " + team.getName() + " - " + str(len(links)))
     getDataByLinks(links, team)
     print("FIN " + team.getName())
 
-def getUniqueTeams(teams):
+def setUniqueTeams(teams):
   unique_teams = []
   addTeam = True
   for team in teams:
