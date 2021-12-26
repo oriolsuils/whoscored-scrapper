@@ -14,6 +14,7 @@ BUNDESLIGA_ENDPOINT = "https://www.whoscored.com/Regions/81/Tournaments/3/German
 LIGUE_1_ENDPOINT = "https://www.whoscored.com/Regions/74/Tournaments/22/France-Ligue-1"
 UCL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/12/Seasons/8177/Stages/19009/Show/Europe-Champions-League-2020-2021"
 UEL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/30/Seasons/8178/Stages/19010/Show/Europe-Europa-League-2020-2021"
+LIVE_MATCHES_ENDPOINT = "https://www.whoscored.com/LiveScores#live"
 
 def initDriver():
   driver = webdriver.Chrome(ChromeDriverManager().install())
@@ -131,6 +132,47 @@ def saveDataSingleMatch(link):
       os.chdir("..")
   driver.close()
 
+def getAllLiveMatches():
+  driver = initDriver()
+  data = []
+  driver.get(LIVE_MATCHES_ENDPOINT)
+  competitions = driver.find_elements_by_xpath("//div[contains(@class, 'divtable-row group')]")
+  i = 0
+  while i < len(competitions):
+    competition_json = {}
+    competition_json["matches"] = []
+    div = competitions[i]
+    competition_id = div.get_attribute("id")
+    competition_label = driver.find_elements_by_xpath("//*[@id='"+competition_id+"']/div[2]/div/a/span")
+    competition_label = competition_label[0].get_attribute("innerHTML")
+    competition_label = competition_label[competition_label.find("</span>")+7:]
+    competition_json["id"] = competition_id
+    competition_json["label"] = competition_label
+    matches_div = driver.find_elements_by_xpath("//*[@data-group-id='"+competition_id[1:]+"']")
+    j = 0
+    while j < len(matches_div):
+      match_json = {}
+      match_id = matches_div[j].get_attribute("id")
+      div_match = driver.find_elements_by_xpath("//*[@id='"+match_id+"']")
+      if(len(div_match) > 0):
+        anchor_match = div_match[0].find_elements_by_css_selector("a.horiz-match-link.result-2.rc")
+        if(len(anchor_match) > 0):
+          home_team = div_match[0].find_elements_by_xpath("//*[@id='"+match_id+"']/div[6]/a/span")
+          away_team = div_match[0].find_elements_by_xpath("//*[@id='"+match_id+"']/div[8]/a/span")
+          time_elapsed = div_match[0].find_elements_by_xpath("//*[@id='"+match_id+"']/div[3]/span[3]/span")
+          match_json["id"] = match_id
+          match_json["url"] = anchor_match[0].get_attribute("href")
+          match_json["result"] = anchor_match[0].get_attribute("innerHTML")
+          match_json["homeTeam"] = home_team[0].get_attribute("innerHTML")
+          match_json["awayTeam"] = away_team[0].get_attribute("innerHTML")
+          match_json["timeElapsed"] = time_elapsed[0].get_attribute("innerHTML")
+          competition_json["matches"].append(match_json)
+      j += 1
+    if len(competition_json["matches"]) > 0:
+      data.append(competition_json)
+    i += 1
+  return data
+
 def menu():
   toQuit = False
   option = 0
@@ -140,7 +182,8 @@ def menu():
     print ("3. Get JSON data entering single match")
     print ("4. Get JSON data from La Liga (Spain), Premier League (England), Serie A (Italy), Bundesliga (Germany), Ligue 1 (France), UCL and UEL")
     print ("5. Live match")
-    print ("6. Exit")
+    print ("6. Get list of live matches")
+    print ("7. Exit")
     print ("Please, choose an option")
     option = askNumber()
 
@@ -171,6 +214,8 @@ def menu():
           break
       print("Job finished")
     elif option == 6:
+      print(getAllLiveMatches())
+    elif option == 7:
       toQuit = True
     else:
       print ("Enter a number between 1 and 4")
