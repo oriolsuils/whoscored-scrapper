@@ -6,6 +6,13 @@ import sys
 from Team import Team
 from webdriver_manager.chrome import ChromeDriverManager
 import threading
+import argparse
+from selenium.webdriver.remote.remote_connection import LOGGER
+import logging
+from selenium.webdriver.chrome.options import Options
+import json
+
+LOGGER.setLevel(logging.WARNING)
 
 LA_LIGA_ENDPOINT = "https://www.whoscored.com/Regions/206/Tournaments/4/Espa%C3%B1a-LaLiga"
 PREMIER_LEAGUE_ENDPOINT = "https://www.whoscored.com/Regions/252/Tournaments/2/England-Premier-League"
@@ -15,9 +22,15 @@ LIGUE_1_ENDPOINT = "https://www.whoscored.com/Regions/74/Tournaments/22/France-L
 UCL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/12/Seasons/8177/Stages/19009/Show/Europe-Champions-League-2020-2021"
 UEL_ENDPOINT = "https://www.whoscored.com/Regions/250/Tournaments/30/Seasons/8178/Stages/19010/Show/Europe-Europa-League-2020-2021"
 LIVE_MATCHES_ENDPOINT = "https://www.whoscored.com/LiveScores#live"
+TOURNAMENT_FILTER = ["England - Premier League", "Spain - LaLiga", "Italy - Serie A", "Germany - 1. Bundesliga", "France - Ligue 1", "Europe - Champions League Final Stage", "Europe - Europa League Final Stage"]
 
 def initDriver():
-  driver = webdriver.Chrome(ChromeDriverManager().install())
+  chrome_options = Options()
+  chrome_options.add_argument("--log-level=3")
+  chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+  logger = logging.getLogger('selenium.webdriver.remote.remote_connection')
+  logger.setLevel(logging.WARNING)
+  driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
   return driver
 
 def getAllLinksTeam(baseURL):
@@ -139,6 +152,7 @@ def getAllLiveMatches():
   competitions = driver.find_elements_by_xpath("//div[contains(@class, 'divtable-row group')]")
   i = 0
   while i < len(competitions):
+    json_data = {}
     competition_json = {}
     competition_json["matches"] = []
     div = competitions[i]
@@ -167,11 +181,26 @@ def getAllLiveMatches():
           match_json["awayTeam"] = away_team[0].get_attribute("innerHTML")
           match_json["timeElapsed"] = time_elapsed[0].get_attribute("innerHTML")
           competition_json["matches"].append(match_json)
+          json_data["tournament"] = competition_json
       j += 1
     if len(competition_json["matches"]) > 0:
-      data.append(competition_json)
+      data.append(json_data)
     i += 1
   return data
+
+def getDataSingleMatch(link):
+  driver = initDriver()
+  json = getJSON(driver, link)
+  driver.close()
+  return json
+
+def filterJSONCompetitions(json_object):
+  json_result = []
+  for competition in json_object:
+    tournament_label = competition['tournament']['label']
+    if any(tournament_label in s for s in TOURNAMENT_FILTER):
+      json_result.append(competition)
+  return json_result
 
 def menu():
   toQuit = False
@@ -290,4 +319,19 @@ def askNumber():
       print('Error, please enter a valid number')
   return num
 
-menu()
+parser = argparse.ArgumentParser(description='Whoscored Scraper')
+parser.add_argument('--mode',
+                    choices=['list', 'menu', 'match'],
+                    help='Mode ')
+parser.add_argument('--url',
+                    help='Match URL like: https://www.whoscored.com/Matches/1492131/Live/Spain-LaLiga-2020-2021-Athletic-Bilbao-Getafe')
+
+args = parser.parse_args(sys.argv[1:])
+if args.mode == 'list':
+  json_tournament = filterJSONCompetitions(getAllLiveMatches())
+  print(json.dumps(json_tournament))
+if args.mode == 'match':
+  print(json.dumps(getDataSingleMatch(args.url)))
+elif args.mode == 'menu':
+  menu()
+
